@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek-V3 简易对话</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --bg-color: #f5f7f9;
+            --chat-bg: #ffffff;
+            --text-color: #333;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #chat-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-width: 800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            line-height: 1.6;
+            max-width: 85%;
+        }
+
+        .ai-message {
+            background-color: var(--chat-bg);
+            border-left: 4px solid var(--primary-color);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .user-message {
+            background-color: var(--primary-color);
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+
+        #input-area {
+            background: white;
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        input {
+            width: 100%;
+            max-width: 600px;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            outline: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    </div>
+
+<div id="input-area">
+    <input type="text" id="user-input" placeholder="输入消息..." onkeydown="if(event.key==='Enter') sendMessage()">
+    <button id="send-btn" onclick="sendMessage()">发送</button>
+</div>
+
+<script>
+    const API_KEY = 'sk-nojugoolxdlsjaectgckdbjnkuogpimwfscrhwgykyxjcgvx';
+    const API_URL = 'https://api.siliconflow.cn/v1/chat/completions';
+    
+    const chatContainer = document.getElementById('chat-container');
+    const userInput = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+
+    // 页面加载后立即调用 API
+    window.onload = () => {
+        sendToAI("你好", true); // 这里的“你好”不会显示在网页中
+    };
+
+    async function sendToAI(prompt, isHidden = false) {
+        if (!isHidden) {
+            appendMessage(prompt, 'user-message');
+        }
+
+        const aiMsgDiv = appendMessage('...', 'ai-message');
+        let aiContent = '';
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: "deepseek-ai/DeepSeek-V3",
+                    messages: [{ role: "user", content: prompt }],
+                    stream: true
+                })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            aiMsgDiv.innerText = ''; // 清除加载状态
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            const content = data.choices[0].delta.content || '';
+                            aiContent += content;
+                            aiMsgDiv.innerText = aiContent; // 实时更新内容
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                        } catch (e) { /* 忽略解析错误 */ }
+                    }
+                }
+            }
+        } catch (error) {
+            aiMsgDiv.innerText = '错误: 无法连接到 API。';
+        }
+    }
+
+    function appendMessage(text, className) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${className}`;
+        msgDiv.innerText = text;
+        chatContainer.appendChild(msgDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        return msgDiv;
+    }
+
+    function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+        userInput.value = '';
+        sendToAI(text);
+    }
+</script>
+
+</body>
+</html>
